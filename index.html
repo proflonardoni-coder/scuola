@@ -107,21 +107,20 @@ function exportSvg(frame=0,total=12){
  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="460" viewBox="0 0 900 460"><defs><style>.connector{opacity:1}.pipe .outer{stroke:#52696a;stroke-width:13;fill:none;stroke-linecap:round;stroke-linejoin:round}.pipe .inner{stroke:#83b7bd;stroke-width:7;fill:none;stroke-linecap:round;stroke-linejoin:round}.pipe .shine{stroke:#dff1ed;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}.steam-pipe .outer{stroke:#52696a;stroke-width:13;fill:none;stroke-linecap:round;stroke-linejoin:round}.steam-pipe .inner{stroke:#d9935e;stroke-width:7;fill:none;stroke-linecap:round;stroke-linejoin:round}.steam-pipe .shine{stroke:#f3ddbd;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}.shaft .outer{stroke:#5c6669;stroke-width:16;fill:none;stroke-linecap:round}.shaft .inner{stroke:#d9e2df;stroke-width:6;fill:none;stroke-linecap:round}.cable .outer{stroke:#343f40;stroke-width:12;fill:none;stroke-linecap:round;stroke-linejoin:round}.cable .inner{stroke:#718181;stroke-width:6;fill:none;stroke-linecap:round;stroke-linejoin:round}.hv .line{stroke:#3d4849;stroke-width:4;fill:none}.hv .line2{stroke:#3d4849;stroke-width:3;fill:none}.connector-flange{fill:#d4ded9;stroke:#576b68;stroke-width:2}</style></defs><rect width="900" height="460" rx="18" fill="#f5f7f1"/><text x="450" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" letter-spacing="1" fill="#203b35">CENTRALE A CARBONE</text><text x="450" y="45" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#65766d">Percorso dell’acqua, del vapore e dell’energia elettrica</text>${wires}${dots}${labels}${nodes}<text x="450" y="447" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" fill="#839087">Schema didattico semplificato</text></svg>`;
 }
 function makeGif(frames,width,height,delay){
- const count=new Uint32Array(32768),sr=new Uint32Array(32768),sg=new Uint32Array(32768),sb=new Uint32Array(32768);
- for(const frame of frames)for(let i=0;i<frame.length;i+=16){const r=frame[i],g=frame[i+1],b=frame[i+2],k=(r>>3)*1024+(g>>3)*32+(b>>3);count[k]++;sr[k]+=r;sg[k]+=g;sb[k]+=b}
- let boxes=[Array.from({length:32768},(_,k)=>count[k]?{k,n:count[k],r:sr[k]/count[k],g:sg[k]/count[k],b:sb[k]/count[k]}:null).filter(Boolean)];
- const bounds=box=>{let lo=[255,255,255],hi=[0,0,0],weight=0;for(const c of box){const v=[c.r,c.g,c.b];weight+=c.n;for(let j=0;j<3;j++){lo[j]=Math.min(lo[j],v[j]);hi[j]=Math.max(hi[j],v[j])}}return {lo,hi,weight}};
- while(boxes.length<256){let bi=-1,score=-1,axis=0;for(let i=0;i<boxes.length;i++){if(boxes[i].length<2)continue;const b=bounds(boxes[i]),ranges=b.hi.map((v,j)=>v-b.lo[j]),a=ranges.indexOf(Math.max(...ranges)),s=ranges[a]*Math.log2(b.weight+1);if(s>score){score=s;bi=i;axis=a}}if(bi<0)break;const box=boxes[bi].sort((a,b)=>[a.r,a.g,a.b][axis]-[b.r,b.g,b.b][axis]),half=bounds(box).weight/2;let sum=0,cut=1;for(let i=0;i<box.length-1;i++){sum+=box[i].n;if(sum>=half){cut=i+1;break}}boxes.splice(bi,1,box.slice(0,cut),box.slice(cut))}
- const palette=[];for(const box of boxes){let n=0,r=0,g=0,b=0;for(const c of box){n+=c.n;r+=sr[c.k];g+=sg[c.k];b+=sb[c.k]}palette.push([Math.round(r/n),Math.round(g/n),Math.round(b/n)])}while(palette.length<256)palette.push([0,0,0]);
- const lut=new Uint8Array(32768);for(let k=0;k<32768;k++){const r=((k>>10)&31)*8+4,g=((k>>5)&31)*8+4,b=(k&31)*8+4;let best=0,dist=Infinity;for(let j=0;j<palette.length;j++){const d=(r-palette[j][0])**2+(g-palette[j][1])**2+(b-palette[j][2])**2;if(d<dist){dist=d;best=j}}lut[k]=best}
+ const count=new Uint32Array(256),sumR=new Uint32Array(256),sumG=new Uint32Array(256),sumB=new Uint32Array(256);
+ const indexOf=(r,g,b)=>((r>>5)<<5)|((g>>5)<<2)|(b>>6);
+ for(const frame of frames)for(let i=0;i<frame.length;i+=4){const k=indexOf(frame[i],frame[i+1],frame[i+2]);count[k]++;sumR[k]+=frame[i];sumG[k]+=frame[i+1];sumB[k]+=frame[i+2]}
+ const palette=[];for(let r=0;r<8;r++)for(let g=0;g<8;g++)for(let b=0;b<4;b++){const k=(r<<5)|(g<<2)|b;if(count[k])palette.push([Math.round(sumR[k]/count[k]),Math.round(sumG[k]/count[k]),Math.round(sumB[k]/count[k])]);else palette.push([Math.round(r*255/7),Math.round(g*255/7),Math.round(b*255/3)])}
  const out=[],ascii=t=>{for(let i=0;i<t.length;i++)out.push(t.charCodeAt(i))},word=n=>{out.push(n&255,(n>>8)&255)};
  ascii('GIF89a');word(width);word(height);out.push(0xF7,0,0);for(const c of palette)out.push(...c);
  out.push(0x21,0xFF,0x0B);ascii('NETSCAPE2.0');out.push(3,1,0,0,0);
- for(const frame of frames){const indices=new Uint8Array(width*height);for(let i=0,j=0;i<frame.length;i+=4,j++){const k=(frame[i]>>3)*1024+(frame[i+1]>>3)*32+(frame[i+2]>>3);indices[j]=lut[k]}
+ for(const frame of frames){
+  const indices=new Uint8Array(width*height);for(let i=0,j=0;i<frame.length;i+=4,j++)indices[j]=indexOf(frame[i],frame[i+1],frame[i+2]);
   out.push(0x21,0xF9,4,0);word(delay);out.push(0,0);out.push(0x2C);word(0);word(0);word(width);word(height);out.push(0,8);
-  const compressed=[],clear=256,stop=257;let next=258,dict=new Map(),buffer=0,held=0;
+  const compressed=[];let buffer=0,held=0;
   const emit=code=>{buffer|=code<<held;held+=9;while(held>=8){compressed.push(buffer&255);buffer>>>=8;held-=8}};
-  emit(clear);let prefix=indices[0];for(let i=1;i<indices.length;i++){const c=indices[i],key=(prefix<<8)|c,found=dict.get(key);if(found!==undefined){prefix=found;continue}emit(prefix);if(next<512)dict.set(key,next++);else{emit(clear);dict=new Map();next=258}prefix=c}emit(prefix);emit(stop);if(held)compressed.push(buffer&255);
+  for(let i=0;i<indices.length;i+=200){emit(256);for(let j=i;j<Math.min(i+200,indices.length);j++)emit(indices[j])}
+  emit(257);if(held)compressed.push(buffer&255);
   for(let i=0;i<compressed.length;i+=255){const n=Math.min(255,compressed.length-i);out.push(n,...compressed.slice(i,i+n))}out.push(0)
  }
  out.push(0x3B);return new Blob([new Uint8Array(out)],{type:'image/gif'});
